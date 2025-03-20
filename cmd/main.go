@@ -9,6 +9,7 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-contrib/gzip"
 	"github.com/gin-gonic/gin"
+	"github.com/sangharshseth/docmon/internal/container"
 	"github.com/sangharshseth/docmon/internal/docker"
 	"github.com/sangharshseth/docmon/internal/image"
 )
@@ -32,6 +33,7 @@ func main() {
 	r.Use(gzip.Gzip(gzip.BestCompression))
 	dockerManager, err := docker.NewDockerManager()
 	imageServiceImplManager := image.NewImageServiceImpl(dockerManager)
+	containerServiceImplManager := container.NewContainerServiceImpl(dockerManager)
 
 	if err != nil {
 		log.Fatal(err.Error())
@@ -53,6 +55,19 @@ func main() {
 				return
 			}
 			c.JSON(http.StatusOK, images)
+		})
+
+		api.GET("/containers-snapshot", func(c *gin.Context) {
+			ctx := context.Background()
+			container_snapshots, err := containerServiceImplManager.GetAllContainers(ctx)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"error": err.Error(),
+				})
+				return
+			}
+
+			c.JSON(http.StatusOK, container_snapshots)
 		})
 	}
 
