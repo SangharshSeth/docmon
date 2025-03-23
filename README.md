@@ -38,57 +38,11 @@ cd docmon
 go build -o docmon ./cmd/main.go
 ```
 
-## API Documentation
-
-The API server runs on port 8080 and provides the following endpoints:
-
-### List Docker Images
-
-```
-GET /api/images
-```
-
-Returns a list of Docker images on the system.
-
-**Response Format:**
-```json
-[
-  {
-    "id": "sha256:...",
-    "tags": ["nginx:latest"],
-    "size": "123MB",
-    "created": "2024-01-01T00:00:00Z"
-  }
-]
-```
-
-### Get Container Snapshots
-
-```
-GET /api/containers-snapshot
-```
-
-Returns the current state of all containers.
-
-**Response Format:**
-```json
-[
-  {
-    "id": "container_id",
-    "name": "container_name",
-    "status": "running",
-    "image": "image_name",
-    "ports": ["80:80"]
-  }
-]
-```
-
 ## Architecture
 
 - Backend: Go with Gin framework
 - Frontend: React (embedded in the binary)
 - Caching: Redis
-- API Format: JSON/REST
 - Static File Serving: Built-in middleware
 
 ## Configuration
@@ -122,5 +76,5 @@ For development, the application uses:
 
 ## License
 
-[Add your license here]
+MIT © [Sangharsh Seth](https://github.com/sangharshseth)
 
