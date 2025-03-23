@@ -1,2 +1,5 @@
 .env
 ui
+static
+knowledge.md
+docker-compose.yml

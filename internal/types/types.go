@@ -29,3 +29,27 @@ type PortMapping struct {
 	PublicPort  int    // Host port (e.g., 8080)
 	Type        string // Port type (e.g., "tcp", "udp")
 }
+
+type DockerContainerInspect struct {
+	ID           string        `json:"id"`
+	Name         string        `json:"name"`
+	Created      string        `json:"created"`
+	State        SimpleState   `json:"state"`
+	Platform     string        `json:"platform"`
+	RestartCount int           `json:"restart_count"`
+	Networks     []NetworkInfo `json:"networks"`
+}
+
+type SimpleState struct {
+	Status     string `json:"status"`      // human readable status (running, stopped, etc)
+	Running    bool   `json:"running"`     // whether container is currently running
+	StartedAt  string `json:"started_at"`  // when the container was started
+	FinishedAt string `json:"finished_at"` // when the container stopped (if not running)
+	ExitCode   int    `json:"exit_code"`   // 0 means successful exit, non-zero means error
+}
+
+type NetworkInfo struct {
+	NetworkName string `json:"network_name"`
+	IPAddress   string `json:"ip_address"`
+	Gateway     string `json:"gateway"`
+}

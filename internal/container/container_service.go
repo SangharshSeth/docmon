@@ -10,4 +10,5 @@ import (
 type ContainerService interface {
 	// ListContainers returns a list of all containers with their details
 	GetAllContainers(ctx context.Context) ([]types.DockerContainerBasicInfo, error)
+	GetContainerStatsById(ctx context.Context, id string)
 }
