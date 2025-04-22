@@ -32,6 +32,9 @@ func init() {
 var Upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
+	CheckOrigin: func(r *http.Request) bool {
+		return true // Allow all origins for WebSocket connections,
+	},
 }
 
 func main() {
@@ -39,7 +42,10 @@ func main() {
 	gin.SetMode(gin.ReleaseMode)
 
 	r := gin.Default()
-	r.SetTrustedProxies(nil)
+	err := r.SetTrustedProxies(nil)
+	if err != nil {
+		return
+	}
 	opt, _ := redis.ParseURL(os.Getenv("REDIS"))
 	redisClient := redis.NewClient(opt)
 
@@ -93,7 +99,7 @@ func main() {
 
 		api.GET("/containers-snapshot", func(c *gin.Context) {
 			ctx := context.Background()
-			container_snapshots, err := containerServiceImplManager.GetAllContainers(ctx)
+			containerSnapshots, err := containerServiceImplManager.GetAllContainers(ctx)
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{
 					"error": err.Error(),
@@ -101,7 +107,68 @@ func main() {
 				return
 			}
 
-			c.JSON(http.StatusOK, container_snapshots)
+			c.JSON(http.StatusOK, containerSnapshots)
+		})
+
+		// Update the existing WebSocket endpoint in your main.go
+		api.GET("/ws", func(c *gin.Context) {
+			conn, err := Upgrader.Upgrade(c.Writer, c.Request, nil)
+			if err != nil {
+				slog.Error("Failed to upgrade connection", "error", err)
+				return
+			}
+			defer conn.Close()
+
+			// Create a done channel to handle graceful shutdown
+			done := make(chan bool)
+			defer close(done)
+
+			// Handle incoming messages in a separate goroutine
+			go func() {
+				for {
+					_, msg, err := conn.ReadMessage()
+					if err != nil {
+						slog.Error("Failed to read message", "error", err)
+						done <- true
+						return
+					}
+					slog.Info("Received message from client", "message", string(msg))
+				}
+			}()
+
+			// Create ticker for periodic updates
+			ticker := time.NewTicker(10 * time.Second)
+			defer ticker.Stop()
+
+			// Send initial data immediately
+			ctx := context.Background()
+			initialStats, err := containerServiceImplManager.GetTotalResourceUsageByAllContainers(ctx)
+			if err == nil {
+				if err := conn.WriteJSON(initialStats); err != nil {
+					slog.Error("Failed to send initial stats", "error", err)
+					return
+				}
+			}
+
+			// Main event loop
+			for {
+				select {
+				case <-done:
+					return
+				case <-ticker.C:
+					ctx := context.Background()
+					stats, err := containerServiceImplManager.GetTotalResourceUsageByAllContainers(ctx)
+					if err != nil {
+						slog.Error("Failed to get resource usage", "error", err)
+						continue
+					}
+
+					if err := conn.WriteJSON(stats); err != nil {
+						slog.Error("Failed to send stats", "error", err)
+						return
+					}
+				}
+			}
 		})
 	}
 	staticDir := "./static"

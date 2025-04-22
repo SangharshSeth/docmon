@@ -110,10 +110,10 @@ func (csrv *ContainerServiceImpl) GetAllContainers(ctx context.Context) ([]types
 	return docker_container_basic_info, nil
 }
 
-func (csrv *ContainerServiceImpl) GetContainerInspectById(ctx context.Context, id string) types.DockerContainerInspect {
+func (csrv *ContainerServiceImpl) GetContainerInspectById(ctx context.Context, id string) (types.DockerContainerInspect, error) {
 	inspect, err := csrv.DockerManager.DockerClient.ContainerInspect(ctx, id)
 	if err != nil {
-		panic(err)
+		return types.DockerContainerInspect{}, fmt.Errorf("failed to inspect container: %w", err)
 	}
 
 	// Convert to our simplified structure
@@ -140,5 +140,113 @@ func (csrv *ContainerServiceImpl) GetContainerInspectById(ctx context.Context, i
 			ExitCode:   inspect.State.ExitCode,
 		},
 		Networks: networks,
+	}, nil
+}
+
+func (csrv *ContainerServiceImpl) GetContainerStatsById(ctx context.Context, id string) (*types.SystemStats, error) {
+	// Get container stats from Docker
+	stats, err := csrv.DockerManager.DockerClient.ContainerStats(ctx, id, false)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get container stats: %w", err)
 	}
+	defer stats.Body.Close()
+
+	var statsData types.SystemStats
+	var dockerStats struct {
+		CPUStats struct {
+			CPUUsage struct {
+				TotalUsage uint64 `json:"total_usage"`
+			} `json:"cpu_usage"`
+			SystemCPUUsage uint64 `json:"system_cpu_usage"`
+		} `json:"cpu_stats"`
+		PreCPUStats struct {
+			CPUUsage struct {
+				TotalUsage uint64 `json:"total_usage"`
+			} `json:"cpu_usage"`
+			SystemCPUUsage uint64 `json:"system_cpu_usage"`
+		} `json:"precpu_stats"`
+		MemoryStats struct {
+			Usage uint64 `json:"usage"`
+			Limit uint64 `json:"limit"`
+		} `json:"memory_stats"`
+		Networks struct {
+			Eth0 struct {
+				RxBytes uint64 `json:"rx_bytes"`
+				TxBytes uint64 `json:"tx_bytes"`
+			} `json:"eth0"`
+		} `json:"networks"`
+	}
+
+	if err := json.NewDecoder(stats.Body).Decode(&dockerStats); err != nil {
+		return nil, fmt.Errorf("failed to decode stats JSON: %w", err)
+	}
+
+	// Calculate CPU usage percentage
+	cpuDelta := float64(dockerStats.CPUStats.CPUUsage.TotalUsage - dockerStats.PreCPUStats.CPUUsage.TotalUsage)
+	systemDelta := float64(dockerStats.CPUStats.SystemCPUUsage - dockerStats.PreCPUStats.SystemCPUUsage)
+
+	if systemDelta > 0 && cpuDelta > 0 {
+		statsData.CPUUsage = (cpuDelta / systemDelta) * 100
+	}
+
+	// Calculate memory usage percentage
+	if dockerStats.MemoryStats.Limit > 0 {
+		statsData.MemoryUsage = (float64(dockerStats.MemoryStats.Usage) / float64(dockerStats.MemoryStats.Limit)) * 100
+	}
+
+	// Network stats
+	statsData.RXBytes = float64(dockerStats.Networks.Eth0.RxBytes)
+	statsData.TXBytes = float64(dockerStats.Networks.Eth0.TxBytes)
+
+	return &statsData, nil
+}
+
+func (csrv *ContainerServiceImpl) GetTotalResourceUsageByAllContainers(ctx context.Context) (*types.AggregatedSystemStats, error) {
+	// Try to get from the cache first
+
+	// Get list of all containers
+	containers, err := csrv.GetAllContainers(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get container list: %w", err)
+	}
+
+	aggregatedStats := &types.AggregatedSystemStats{
+		PerContainer: make(map[string]*types.SystemStats),
+	}
+
+	// Collect stats for each container
+	for _, container := range containers {
+		// Skip if the container is not running
+		if container.State != "running" {
+			continue
+		}
+
+		stats, err := csrv.GetContainerStatsById(ctx, container.ID)
+		if err != nil {
+			slog.Error("Failed to get stats for container",
+				"containerId", container.ID,
+				"error", err)
+			continue
+		}
+
+		// Add to per-container map
+		aggregatedStats.PerContainer[container.ID] = stats
+
+		// Aggregate statistics
+		aggregatedStats.TotalCPUUsage += stats.CPUUsage
+		aggregatedStats.TotalMemoryUsage += stats.MemoryUsage
+		aggregatedStats.TotalRXBytes += stats.RXBytes
+		aggregatedStats.TotalTXBytes += stats.TXBytes
+		aggregatedStats.RunningCount++
+	}
+
+	aggregatedStats.ContainerCount = len(containers)
+
+	// Cache the results
+	_, err = json.Marshal(aggregatedStats)
+	if err != nil {
+		slog.Error("Failed to marshal aggregated stats", "error", err)
+		return aggregatedStats, nil
+	}
+	return aggregatedStats, nil
 }

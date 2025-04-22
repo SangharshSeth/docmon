@@ -53,3 +53,21 @@ type NetworkInfo struct {
 	IPAddress   string `json:"ip_address"`
 	Gateway     string `json:"gateway"`
 }
+
+type SystemStats struct {
+	CPUUsage    float64 `json:"cpu_usage"`
+	MemoryUsage float64 `json:"memory_usage"`
+	DiskUsage   float64 `json:"disk_usage"`
+	RXBytes     float64 `json:"rx_bytes"`
+	TXBytes     float64 `json:"tx_bytes"`
+}
+
+type AggregatedSystemStats struct {
+	TotalCPUUsage    float64                 `json:"total_cpu_usage"`
+	TotalMemoryUsage float64                 `json:"total_memory_usage"`
+	TotalRXBytes     float64                 `json:"total_rx_bytes"`
+	TotalTXBytes     float64                 `json:"total_tx_bytes"`
+	ContainerCount   int                     `json:"container_count"`
+	RunningCount     int                     `json:"running_count"`
+	PerContainer     map[string]*SystemStats `json:"per_container"`
+}

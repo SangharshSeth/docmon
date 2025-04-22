@@ -7,8 +7,12 @@ import (
 )
 
 // ContainerService defines the interface for container operations
+// ContainerService defines the interface for container operations
 type ContainerService interface {
-	// ListContainers returns a list of all containers with their details
+	// GetAllContainers returns a list of all containers with their details
 	GetAllContainers(ctx context.Context) ([]types.DockerContainerBasicInfo, error)
-	GetContainerStatsById(ctx context.Context, id string)
+	// GetContainerStatsById returns resource usage statistics for a specific container
+	GetContainerStatsById(ctx context.Context, id string) (*types.SystemStats, error)
+	// GetTotalResourceUsageByAllContainers returns aggregated resource usage statistics for all containers
+	GetTotalResourceUsageByAllContainers(ctx context.Context) (*types.AggregatedSystemStats, error)
 }
